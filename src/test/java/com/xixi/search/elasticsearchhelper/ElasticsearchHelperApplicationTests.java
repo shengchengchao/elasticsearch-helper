@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
 
 import java.io.IOException;
 import java.util.Map;
@@ -25,28 +26,14 @@ class ElasticsearchHelperApplicationTests {
 
    
     @Autowired 
-    private RestHighLevelClient elasticsearchClient;
-    
+    private ElasticsearchRestTemplate elasticsearchRestTemplate;
+
     @Test
     void contextLoads() throws IOException {
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-        sourceBuilder.query(QueryBuilders.matchQuery("body", "elk"));
-        sourceBuilder.from(0);
-        sourceBuilder.size(5);
-        sourceBuilder.timeout(new TimeValue(60, TimeUnit.SECONDS));
-        SearchRequest searchRequest = new SearchRequest();
-        searchRequest.source(sourceBuilder);
-        searchRequest.indices("blogs");
-        SearchResponse response = elasticsearchClient.search(searchRequest, RequestOptions.DEFAULT);
-        long totalHits = response.getHits().getTotalHits();
-        log.info("result.hit={}", totalHits);
-
-        for (SearchHit hit : response.getHits()) {
-            Map<String, Object> map = hit.getSourceAsMap();
-            log.info("map={}", map.toString());
-            log.info("docId={}", hit.getId());
-        }
-
+        elasticsearchRestTemplate.deleteIndex("mytest");
     }
+
+
+
 
 }
