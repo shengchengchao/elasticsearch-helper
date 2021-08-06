@@ -1,0 +1,10 @@
+spring:
+  elasticsearch:
+    rest:
+      uris: http://127.0.0.1:9200
+      username:
+      password:
+      connection-timeout: 1000
+      read-timeout: 1000
+elasticsearch:
+  importSize: 3000
