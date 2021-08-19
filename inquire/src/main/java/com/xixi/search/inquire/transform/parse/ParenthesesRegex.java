@@ -3,6 +3,8 @@ package com.xixi.search.inquire.transform.parse;
 import com.xixi.search.common.advice.ElasticSearchAssert;
 import com.xixi.search.common.enums.ParenthesesEnum;
 import com.xixi.search.inquire.transform.dto.ExpressionDTO;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.util.CollectionUtils;
 
 import java.util.*;
 
@@ -29,6 +31,7 @@ public class ParenthesesRegex {
      * @return
      */
     public static boolean isSymbolTwin(String text) {
+        ElasticSearchAssert.meetCondition(StringUtils.isBlank(text),"字符串为空");
         //定义左右括号关系
         Stack stack = new Stack<>(); //定义栈
         for (int i = 0; i < text.length(); i++) {
@@ -48,6 +51,23 @@ public class ParenthesesRegex {
         return stack.isEmpty() ? true : false;
     }
 
+    public static String removeExcludeParentheses(String text){
+        ElasticSearchAssert.meetCondition(StringUtils.isBlank(text),"字符串为空");
+        ElasticSearchAssert.meetCondition(!isSymbolTwin(text),"括号匹配失败");
+
+        int count =0;
+        for (int j = 0; j <text.length() ; j++) {
+            if(bracket.containsValue(text.charAt(j)) && bracket.containsKey(text.charAt(text.length()-j-1))){
+               count++;
+            }else{
+               break;
+            }
+        }
+        return StringUtils.substring(text,count,text.length()-count);
+
+    }
+
+
 
     /**
      *
@@ -56,7 +76,8 @@ public class ParenthesesRegex {
      * @return
      */
     public static List<ExpressionDTO> getSymbolStr(String text,Character parentheses) {
-        ElasticSearchAssert.meetCondition(!bracket.containsValue(parentheses),"暂不支持的符号:"+parentheses);
+        ElasticSearchAssert.meetCondition(StringUtils.isBlank(text),"字符串为空");
+        ElasticSearchAssert.meetCondition(!bracket.containsValue(parentheses),"暂不支持的字符串:"+parentheses);
         //残缺的括号内容
         List<ExpressionDTO> bracketList = new LinkedList<>();
         List<ExpressionDTO> result = new ArrayList<>();
@@ -64,18 +85,21 @@ public class ParenthesesRegex {
             Character nowStr = text.charAt(x);
             if (bracket.containsValue(nowStr) && nowStr.equals(parentheses)) { //如果是左括号
                 //如果不是第一次左括号说明之前还有左括号如：（工信部网安〔2018〕105号） 有俩左括号
-                if (bracketList.size() > 0) {
+                if (!CollectionUtils.isEmpty(bracketList)) {
                     for (int i = 0; i < bracketList.size(); i++) {
                         ExpressionDTO expressionDTO = bracketList.get(i);
+                        // 多个左括号嵌套只保留一层 ((()))
                         expressionDTO.getExpression().append(nowStr);
                     }
+                }else{
+                    StringBuffer sb = new StringBuffer();
+                    sb.append(nowStr);
+                    ExpressionDTO expressionDTO = new ExpressionDTO();
+                    expressionDTO.setStartIndex(x);
+                    expressionDTO.setExpression(sb);
+                    bracketList.add(expressionDTO);
                 }
-                StringBuffer sb = new StringBuffer();
-                sb.append(nowStr);
-                ExpressionDTO expressionDTO = new ExpressionDTO();
-                expressionDTO.setStartIndex(x);
-                expressionDTO.setExpression(sb);
-                bracketList.add(expressionDTO);
+
                 //是右括号
             } else if (bracket.containsKey(nowStr) && nowStr.equals(ParenthesesEnum.getValueByLeft(parentheses))) {
                 for (int i = 0; i < bracketList.size(); i++) {
@@ -84,14 +108,14 @@ public class ParenthesesRegex {
                     StringBuffer expression = expressionDTO.getExpression();
                     //添加右括号
                     expression.append(nowStr);
+
                     //判断当前文本是否符合成对符号
-                    if (isSymbolTwin(expression.toString())) {
+                    if (isSymbolTwin(expression.toString()) ) {
                         //符合
                         expressionDTO.setEndIndex(x);
                         result.add(expressionDTO);
                         //删除已经成对的内容 确保不会出现多次
                         bracketList.remove(expressionDTO);
-                    } else {
                     }
                 }
                 //已经有了左括号
@@ -105,9 +129,4 @@ public class ParenthesesRegex {
         return result;
     }
 
-    public static void main(String[] args) {
-        String s ="a>2 && b>3 || (c<5 && d>6 || (e<5))";
-        List<ExpressionDTO> symbolStr = getSymbolStr(s, '(');
-        System.out.println(symbolStr);
-    }
 }

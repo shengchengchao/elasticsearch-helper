@@ -13,4 +13,10 @@ public class RelateExpressionDTO {
     private String relation;
 
     private String expression;
+
+
+    public RelateExpressionDTO(String relation, String expression) {
+        this.relation = relation;
+        this.expression = expression;
+    }
 }
