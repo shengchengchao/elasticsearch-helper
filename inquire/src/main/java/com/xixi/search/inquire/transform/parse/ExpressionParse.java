@@ -1,6 +1,6 @@
 package com.xixi.search.inquire.transform.parse;
 
-import com.xixi.search.inquire.transform.dto.ExpressionTree;
+import java.util.List;
 
 /**
  * 表达式解析类
@@ -18,5 +18,5 @@ public interface ExpressionParse {
      * @param expression
      * @return
      */
-    ExpressionTree parseTree(String expression);
+    List<String> parseTree(String expression);
 }

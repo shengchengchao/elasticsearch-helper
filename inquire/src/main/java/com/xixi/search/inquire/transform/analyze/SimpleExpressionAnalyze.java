@@ -108,9 +108,16 @@ public class SimpleExpressionAnalyze implements ExpressionAnalyze {
         }
         FieldDTO fieldDTO = new FieldDTO();
         String relation = instance.expressionRelationAnalyze(expression);
+
         if(StringUtils.isNotBlank(relation)){
             fieldDTO.setRelation(relation);
-            fieldDTO.setValue(instance.expressionValueAnalyze(expression));
+            Object value = instance.expressionValueAnalyze(expression);
+            if(value !=null && StringUtils.contains(String.valueOf(value),',')){
+                String valueStr = String.valueOf(value);
+                List<String> valueList = Splitter.on(",").splitToList(valueStr);
+                fieldDTO.setListValue(valueList);
+            }
+            fieldDTO.setValue(value);
             fieldDTO.setFieldName(instance.expressionFieldAnalyze(expression));
         }
         return fieldDTO;

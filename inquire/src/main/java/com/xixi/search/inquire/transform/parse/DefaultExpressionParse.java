@@ -2,11 +2,13 @@ package com.xixi.search.inquire.transform.parse;
 
 import com.google.common.base.Splitter;
 import com.xixi.search.common.enums.RelateEnum;
-import com.xixi.search.inquire.transform.dto.ExpressionTree;
-import com.xixi.search.inquire.transform.tree.TreeOperate;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author shengchengchao
@@ -15,92 +17,74 @@ import java.util.List;
  */
 public abstract class DefaultExpressionParse implements ExpressionParse {
 
-    protected static TreeOperate treeOperate;
-
-    static {
-        treeOperate = TreeOperate.getInstance();
-    }
 
     /**
-     * 将检索条件变更为树的接口 目前做法是先进行拆分 拆分后将数据进行
+     * 将检索条件 先进行拆分 拆分后将数据进行
      * @param expression
      * @return
      */
-    public ExpressionTree parseTree(String expression) {
+    public List<String> parseTree(String expression) {
         if(StringUtils.isBlank(expression)){
-            return new ExpressionTree();
+            return new ArrayList<>();
         }
+        //分割 && ||
+        List<String> list = spiltExpression(expression);
+        return list;
+    }
 
+    /**
+     * 进行分隔
+     * @param expression
+     * @return
+     */
+    protected  List<String>  spiltExpression(String expression){
         List<String> midList = Splitter.on(RelateEnum.AND.getCode()).splitToList(expression);
-        ExpressionTree  expressionTree= packageAndNode(midList);
-        if(expressionTree!=null){
-            expressionTree = expressionTree.getLeft();
+        LinkedList<String> result = new LinkedList<>();
+
+        List<String> orCollect = midList.stream().filter(x -> StringUtils.contains(x, "||")).collect(Collectors.toList());
+        List<String> andCollect = midList.stream().filter(x ->!StringUtils.contains(x, "||")).collect(Collectors.toList());
+
+        andCollect.forEach(x->{
+            result.add(x);
+            result.add(RelateEnum.AND.getCode());
+        });
+        if(CollectionUtils.isEmpty(orCollect)){
+            result.removeLast();
+            return result;
         }
-        ExpressionTree result = new ExpressionTree("");
-        //由于与节点都在左分支上 只需要遍历节点就可以了
-        while(expressionTree!=null){
-            if(StringUtils.contains(expressionTree.getValue(), RelateEnum.OR.getCode())){
-                ExpressionTree left = expressionTree.getLeft();
-                ExpressionTree tree = packageOrNode(expressionTree.getValue());
-                ExpressionTree endLeft = treeOperate.getEndLeft(result);
-                endLeft.setLeft(tree);
-                expressionTree=left;
-            }else{
-                ExpressionTree endLeft = treeOperate.getEndLeft(result);
-                endLeft.setLeft(new ExpressionTree(expressionTree.getValue()) );
-                expressionTree =expressionTree.getLeft();
+        List<String> orList = new ArrayList<>();
+        orCollect.forEach(x->{
+            orList.addAll(Splitter.on(RelateEnum.OR.getCode()).splitToList(x));
+        });
+        orList.forEach(each->{
+            result.add(each);
+            result.add(RelateEnum.OR.getCode());
+        });
+        result.removeLast();
+        return result;
+    }
+
+
+    public abstract List<String> nestParseTree(String expression);
+
+
+    protected List<String> inorderToPosted(List<String> list){
+        if(CollectionUtils.isEmpty(list)){
+            return new ArrayList<>();
+        }
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            String expression = list.get(i);
+            if(RelateEnum.OR.getCode().equals(expression) || RelateEnum.AND.getCode().equals(expression)){
+                if(i+1<list.size()){
+                    result.add(list.get(i+1));
+                    i++;
+                }
             }
+            result.add(expression);
         }
-        return result.getLeft();
-
-
+        return result;
     }
-
-
-
-
-
-    /**
-     * 包装且节点
-     * @param list
-     * @param code
-     * @return
-     */
-    protected ExpressionTree packageAndNode(List<String> list) {
-        ExpressionTree tree =null;
-        for (String express : list) {
-            ExpressionTree leftTree = new ExpressionTree(express);
-            leftTree.setLeft(tree);
-            tree=new ExpressionTree(RelateEnum.AND.getCode());
-            tree.setLeft(leftTree);
-        }
-        return tree;
-    }
-
-    /**
-     * 包装与节点
-     * @param list
-     * @param code
-     * @return
-     */
-    protected ExpressionTree packageOrNode(String expression) {
-        List<String> list = Splitter.on(RelateEnum.OR.getCode()).splitToList(expression);
-        ExpressionTree tree = new ExpressionTree(list.get(0));
-        ExpressionTree head =null;
-        for (int i = 1; i < list.size(); i++) {
-            ExpressionTree right = new ExpressionTree(list.get(i));
-            right.setRight(head);
-            head=new ExpressionTree(RelateEnum.OR.getCode());
-            head.setRight(right);
-        }
-        head.setLeft(tree);
-        return head;
-    }
-
-
-    public abstract ExpressionTree nestParseTree(String expression);
-
-
 
 
 }

@@ -1,6 +1,7 @@
 package com.xixi.search.common.index;
 
 import com.google.common.collect.Lists;
+import com.xixi.search.common.annotation.MyHighLightField;
 import com.xixi.search.common.util.EsUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -18,6 +19,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.annotations.Document;
+import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.core.AbstractResultMapper;
 import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
 import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
@@ -27,9 +29,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author shengchengchao
@@ -53,13 +53,28 @@ public abstract class IndexOperate<T> {
     Field[] declaredFields;
 
     /**
+     * 得到对应的关系
+     */
+    Map<String,String> fieldMap;
+
+    /**
      * 主键id的字段名字
      */
     String idField;
+
+
     /**
      * 索引名
      */
     String indexName;
+
+    public Class<T> gettClass() {
+        return tClass;
+    }
+
+    public Field[] getDeclaredFields() {
+        return declaredFields;
+    }
 
     public IndexOperate() {
         ParameterizedType genericSuperclass = (ParameterizedType) this.getClass().getGenericSuperclass();
@@ -86,6 +101,28 @@ public abstract class IndexOperate<T> {
             indexName = annotation.indexName();
 
         }
+    }
+
+    public String getIdField() {
+        return idField;
+    }
+
+
+    public Map<String, String> getFieldMap() {
+        if(CollectionUtils.isEmpty(fieldMap)){
+            Map<String, String> map = new HashMap<String, String>();
+            Field[] declaredFields = getDeclaredFields();
+            for (Field declaredField : declaredFields) {
+                org.springframework.data.elasticsearch.annotations.Field annotation = AnnotationUtils.findAnnotation(declaredField, org.springframework.data.elasticsearch.annotations.Field.class);
+                if(annotation!=null){
+                    FieldType type = annotation.type();
+                    map.put(declaredField.getName(),type.toString());
+                }
+            }
+            fieldMap = map;
+        }
+        return fieldMap;
+        
     }
 
     /**
@@ -290,6 +327,8 @@ public abstract class IndexOperate<T> {
         log.info(" IndexOperate.selectPage 查询dsl语句为 {} ",searchQuerySource);
         return elasticsearchRestTemplate.queryForPage(searchQuery, tClass);
     }
+
+
 
 
     /**

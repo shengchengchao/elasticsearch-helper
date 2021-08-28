@@ -53,6 +53,9 @@ public class ParenthesesRegex {
 
     public static String removeExcludeParentheses(String text){
         ElasticSearchAssert.meetCondition(StringUtils.isBlank(text),"字符串为空");
+        if(!StringUtils.contains(text,'(')){
+            return text;
+        }
         ElasticSearchAssert.meetCondition(!isSymbolTwin(text),"括号匹配失败");
 
         int count =0;

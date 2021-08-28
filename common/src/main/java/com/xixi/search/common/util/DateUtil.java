@@ -1307,7 +1307,7 @@ public class DateUtil {
             DateFormat format = new SimpleDateFormat(DATE_FORMAT_PATTERN);
             try {
                 Date strDate = format.parse(str);
-                return DateUtil.format(strDate, DateUtil.DATETIME_FORMAT_PATTERN);
+                return DateUtil.format(strDate, DateUtil.DATE_FORMAT_PATTERN);
             } catch (ParseException e) {
                 log.error("格式化错误");
             }
