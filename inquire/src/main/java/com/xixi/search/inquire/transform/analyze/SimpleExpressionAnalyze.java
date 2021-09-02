@@ -20,7 +20,7 @@ public class SimpleExpressionAnalyze implements ExpressionAnalyze {
 
     private static SimpleExpressionAnalyze instance;
 
-    private SimpleExpressionAnalyze (){}
+
 
     public static synchronized SimpleExpressionAnalyze getInstance() {
         if (instance == null) {
@@ -29,6 +29,8 @@ public class SimpleExpressionAnalyze implements ExpressionAnalyze {
         return instance;
     }
 
+    public SimpleExpressionAnalyze() {
+    }
 
     /**
      * 解析表达式中中的字段名

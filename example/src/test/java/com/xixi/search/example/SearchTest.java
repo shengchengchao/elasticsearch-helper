@@ -2,7 +2,7 @@ package com.xixi.search.example;
 
 import com.xixi.search.common.param.ExtentSearchPageParam;
 import com.xixi.search.common.util.PagingHelper;
-import com.xixi.search.example.search.EmployeeSearchQuery;
+import com.xixi.search.example.search.EmployeeExpressionSearchQuery;
 import com.xixi.search.example.transport.index.EmployeeEsEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ class SearchTest {
 
 
     @Autowired
-    private EmployeeSearchQuery employeeSearchQuery;
+    private EmployeeExpressionSearchQuery employeeSearchQuery;
 
     @Test
     public void getResults(){

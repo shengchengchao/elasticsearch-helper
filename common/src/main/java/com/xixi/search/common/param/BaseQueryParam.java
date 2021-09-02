@@ -1,6 +1,7 @@
 package com.xixi.search.common.param;
 
 import com.xixi.search.common.constant.EsConstants;
+import com.xixi.search.common.dto.SearchTreeDTO;
 import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.Tolerate;
@@ -35,6 +36,8 @@ public class BaseQueryParam {
      */
     private String baseEsQueryParams;
 
+
+    private SearchTreeDTO searchTreeDTO;
     /**
      * 其他附加的条件 获取id字段 默认是and
      */

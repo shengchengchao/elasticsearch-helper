@@ -40,8 +40,13 @@ public class parseTest {
         System.out.println(list.stream().collect(Collectors.joining(",")));
 
     }
+                                    
 
+    @Test
+    public void testParser5(){
+       
 
+    }
 
     @Test
     public void testParser2(){
@@ -59,8 +64,6 @@ public class parseTest {
         List<String> list = nestExpressionParse.nestParseTree(s);
         System.out.println(list.stream().collect(Collectors.joining(",")));
     }
-
-
 
 
 }

@@ -1,5 +1,6 @@
 package com.xixi.search.common.param;
 
+import com.xixi.search.common.dto.SearchTreeDTO;
 import lombok.Data;
 
 /**
@@ -14,7 +15,10 @@ public class SearchParam {
      */
     private String searchExpression;
 
-
+    /**
+     * 检索树
+     */
+    private SearchTreeDTO searchTreeDTO;
     /**
      * 需要查询的字段 如果没有的话。默认查询全部的字段
      */

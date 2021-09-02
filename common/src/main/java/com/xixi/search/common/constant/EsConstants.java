@@ -84,4 +84,24 @@ public class EsConstants {
     public static final String FIELD_ANALYZER = "ik_syno";
     /** 检索的分析词 */
     public static final String SEARCH_ANALYZER = "ik_syno";
+
+    /**
+     * 用于聚合的字段
+     */
+    public static final String CODE ="CODE";
+
+    public static final String FILTER="FILTER";
+
+
+    public static final String CHILDREN_CODE = "CHILDREN";
+
+    /**
+     * 逻辑节点
+     */
+    public static final String LOGIC_TYPE = "LOGIC";
+
+    /**
+     * 条件节点
+     */
+    public static final String CONDITION_TYPE = "CONDITION";
 }

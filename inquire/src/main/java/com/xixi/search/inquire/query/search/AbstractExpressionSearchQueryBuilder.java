@@ -2,6 +2,7 @@ package com.xixi.search.inquire.query.search;
 
 import com.google.common.collect.Lists;
 import com.xixi.search.common.dto.BoolQueryDTO;
+import com.xixi.search.common.dto.SearchTreeDTO;
 import com.xixi.search.common.index.IndexOperate;
 import com.xixi.search.common.param.BaseQueryParam;
 import com.xixi.search.common.param.ExtentSearchPageParam;
@@ -41,10 +42,10 @@ import java.util.Optional;
  */
 @Slf4j
 @Component
-public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> implements BaseSearch {
+public abstract class AbstractExpressionSearchQueryBuilder<T> extends IndexOperate<T> implements BaseSearch {
 
     @Autowired 
-    private ElasticsearchRestTemplate elasticsearchRestTemplate;
+    protected ElasticsearchRestTemplate elasticsearchRestTemplate;
 
     private static NestExpressionParse parseInstance;
 
@@ -73,13 +74,10 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
      * @return
      */
     PagingHelper<T> selectPage(ExtentSearchPageParam params, AbstractResultMapper ResultMapper){
-        String[] fields =  params.getFields()!=null && params.getFields().length>0 ?params.getFields() : getFields();
-        BaseQueryParam param = BaseQueryParam.builder()
-                .indexName(getIndexName())
-                .fields(fields)
-                .baseEsQueryParams(params.getSearchExpression())
-                .pageable(PageRequest.of(Optional.ofNullable(params.getPageNum()).orElse(1) - 1, Optional.ofNullable(params.getPageCount()).orElse(10)))
-                .build();
+        BaseQueryParam param = buildQueryParam(params);
+        param.setPageable(PageRequest.of(params.getPageNum()-1,params.getPageNum()));
+
+        //拦截添加处理
         HandleRegistry handleRegistry = addSearchHandler(params.getExtendMap());
         AggregatedPage<T> pageResult = selectPage(param, ResultMapper, handleRegistry);
         PagingHelper myPage = new PagingHelper<>();
@@ -87,6 +85,24 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
         buildOtherResult(pageResult,myPage);
         return myPage;
     }
+
+    /**
+     * 查询集合
+     * @param params   参数
+     * @return
+     */
+    List<T> searchQuery(ExtentSearchPageParam params){
+        BaseQueryParam param = buildQueryParam(params);
+        HandleRegistry handleRegistry = addSearchHandler(params.getExtendMap());
+        return searchQuery(param, handleRegistry);
+    }
+
+
+    protected  List<T> searchQuery(BaseQueryParam param, HandleRegistry handleRegistry){
+        SearchQuery searchQuery = buildSearchQuery(param, handleRegistry);
+        return elasticsearchRestTemplate.queryForList(searchQuery,gettClass());
+    }
+
 
     /**
      * 添加额外的结果
@@ -102,6 +118,32 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
      * @return
      */
     protected abstract HandleRegistry addSearchHandler(Map extendMap);
+
+    /**
+     * 构建查询
+     * @param params
+     * @return
+     */
+    protected BaseQueryParam buildQueryParam(ExtentSearchPageParam params){
+        String[] fields =  params.getFields()!=null && params.getFields().length>0 ?params.getFields() : getFields();
+        return buildQueryParam(fields,getIndexName(),params.getSearchExpression());
+    }
+
+    /**
+     * 构建查询
+     * @param fields  需要查询的字段
+     * @param indexName  索引名称
+     * @param searchExpression  查询表达式
+     * @return
+     */
+    protected BaseQueryParam buildQueryParam(String[] fields,String indexName,String searchExpression){
+        BaseQueryParam param = BaseQueryParam.builder()
+                .indexName(indexName)
+                .fields(fields)
+                .baseEsQueryParams(searchExpression)
+                .build();
+        return param;
+    }
 
 
     /**
@@ -121,7 +163,7 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
 
     /**
      * 采用默认的对象转换类
-     * @param params
+     * @param params   检索参数
      * @return
      */
     public PagingHelper<T> selectPage(ExtentSearchPageParam params){
@@ -130,19 +172,13 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
 
     /**
      * 检索分页
-     * @param baseQueryParam
-     * @param ResultMapper
+     * @param baseQueryParam   检索参数
+     * @param ResultMapper    结果转换类
      * @param handleRegistry 处理中心
      * @return
      */
     private AggregatedPage<T> selectPage(BaseQueryParam baseQueryParam, AbstractResultMapper ResultMapper, HandleRegistry handleRegistry) {
-        //构建其他类型的条件
-        List<EsHandleParam> esHandleParams = Optional.ofNullable(handleRegistry.getHandlerList()).orElse(Lists.newArrayList());
-        esHandleParams.forEach(each->each.getHandle().execute(this,each.getParam(),baseQueryParam));
-
-        NativeSearchQueryBuilder searchQueryBuilder = getSearchQueryBuilder(baseQueryParam);
-        //获取查询
-        SearchQuery searchQuery = searchQueryBuilder.build();
+        SearchQuery searchQuery = buildSearchQuery(baseQueryParam, handleRegistry);
         try {
             return elasticsearchRestTemplate.queryForPage(searchQuery, gettClass(), ResultMapper);
         } catch (Exception e) {
@@ -151,38 +187,68 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
         return null;
     }
 
+    /**
+     * 构建searchQuery语句
+     * @param baseQueryParam  请求参数
+     * @param handleRegistry  拦截处理类
+     * @return
+     */
+    protected  SearchQuery buildSearchQuery(BaseQueryParam baseQueryParam,HandleRegistry handleRegistry){
+        //构建其他类型的条件
+        List<EsHandleParam> esHandleParams = Optional.ofNullable(handleRegistry.getHandlerList()).orElse(Lists.newArrayList());
+        esHandleParams.forEach(each->each.getHandle().execute(this,each.getParam(),baseQueryParam));
+
+        NativeSearchQueryBuilder searchQueryBuilder = getSearchQueryBuilder(baseQueryParam);
+        //获取查询
+        return searchQueryBuilder.build();
+    }
+
 
     /**
      * 构建外层检索DSL语句
-     * @param baseQueryParam
+     * @param baseQueryParam   检索参数
      * @return
      */
     @Override
     public NativeSearchQueryBuilder getSearchQueryBuilder(BaseQueryParam baseQueryParam) {
         BoolQueryBuilder finalQueryBuilder = QueryBuilders.boolQuery();
-
-
-        if (baseQueryParam.getBaseEsQueryParams() != null) {
-            BoolQueryBuilder queryBuilder = Optional.ofNullable(buildFinalQuery(baseQueryParam.getBaseEsQueryParams())).orElse(QueryBuilders.boolQuery());
+        /**
+         * 树的DSL语句构建
+         */
+        if(baseQueryParam.getSearchTreeDTO()!=null){
+            BoolQueryBuilder queryBuilder = Optional.ofNullable(buildTreeQuery(baseQueryParam.getSearchTreeDTO())).orElse(QueryBuilders.boolQuery());
             finalQueryBuilder.filter(queryBuilder);
         }
 
+        /**
+         * 表达式的DSL语句构建
+         */
+        if (baseQueryParam.getBaseEsQueryParams() != null) {
+            BoolQueryBuilder queryBuilder = Optional.ofNullable(buildExpressionQuery(baseQueryParam.getBaseEsQueryParams())).orElse(QueryBuilders.boolQuery());
+            finalQueryBuilder.filter(queryBuilder);
+        }
 
-        // 其他语句
+        /**
+         * 其他语句构建
+         */
         if (baseQueryParam.getOtherQuery() != null) {
             BoolQueryBuilder otherBoolQueryBuilder = QueryBuilders.boolQuery();
             baseQueryParam.getOtherQuery().forEach(each -> otherBoolQueryBuilder.must(each));
             finalQueryBuilder.filter(otherBoolQueryBuilder);
         }
 
-        // 需要排除的语句
+        /**
+         * 需要额外排除的语句构建
+         */
         if (!CollectionUtils.isEmpty(baseQueryParam.getExcludeQuery())) {
             for (QueryBuilder queryBuilder : baseQueryParam.getExcludeQuery()) {
                 finalQueryBuilder.mustNot(queryBuilder);
             }
         }
 
-        // 额外添加额id集合
+        /**
+         * 额外的id集合构建
+         */
         if (baseQueryParam.getAppendIdList() != null) {
             BoolQueryBuilder finalQueryBuilder2 = QueryBuilders.boolQuery();
             finalQueryBuilder2.should(finalQueryBuilder);
@@ -212,12 +278,14 @@ public abstract class AbstractSearchQueryBuilder<T> extends IndexOperate<T> impl
 
     }
 
+    protected abstract BoolQueryBuilder buildTreeQuery(SearchTreeDTO searchTreeDTO);
+
     /**
      * 将表达式进行转换成树的格式 继续解析后处理
-     * @param baseEsQueryParams
+     * @param baseEsQueryParams 检索参数
      * @return
      */
-    protected  BoolQueryBuilder buildFinalQuery(String baseEsQueryParams){
+    protected  BoolQueryBuilder buildExpressionQuery(String baseEsQueryParams){
         NestExpressionParse instance = getParseInstance();
         //解析表达式
         List<String> expressionList = instance.nestParseTree(baseEsQueryParams);

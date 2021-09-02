@@ -1,7 +1,6 @@
 package com.xixi.search.common.index;
 
 import com.google.common.collect.Lists;
-import com.xixi.search.common.annotation.MyHighLightField;
 import com.xixi.search.common.util.EsUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;

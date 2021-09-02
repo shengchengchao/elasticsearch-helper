@@ -1,12 +1,17 @@
 package com.xixi.search.inquire.query.search.execute;
 
+import com.xixi.search.common.advice.ElasticSearchAssert;
 import com.xixi.search.common.advice.ElasticSearchException;
 import com.xixi.search.common.constant.RegexConstants;
 import com.xixi.search.common.dto.BoolQueryDTO;
 import com.xixi.search.common.enums.RelateEnum;
+import com.xixi.search.common.util.BeanUtils;
 import com.xixi.search.common.util.DateUtil;
 import com.xixi.search.inquire.transform.analyze.SimpleExpressionAnalyze;
+import com.xixi.search.inquire.transform.dto.CompleteFieldDTO;
 import com.xixi.search.inquire.transform.dto.FieldDTO;
+import com.xixi.search.inquire.transform.dto.FieldRelateDTO;
+import com.xixi.search.inquire.transform.dto.FieldTreeRelateDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.search.join.ScoreMode;
@@ -22,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -59,29 +65,26 @@ public class ExpressionPackageBoolQueryExecute extends AbstractPackageBoolQueryE
              this.getNextExecute().packageQuery(expression, boolQueryDTO);
              return;
         }
-        QueryBuilder queryBuilder;
+        QueryBuilder queryBuilder = getQueryBuilder(fieldDTO, fieldMap, boolQueryDTO.getDeclaredFields());
+        List<QueryBuilder> list = Optional.ofNullable(boolQueryDTO.getQueryBuilder()).orElse(new ArrayList<>());
+        list.add(queryBuilder);
+        boolQueryDTO.setQueryBuilder(list);
+    }
+
+    private QueryBuilder getQueryBuilder(FieldDTO fieldDTO,Map<String, String> fieldMap,Field[] declaredFields){
         String fieldName = fieldDTO.getFieldName();
         if(fieldMap.containsKey(fieldName)){
             String type = fieldMap.get(fieldName);
-            queryBuilder = packageBaseBool(fieldDTO,type);
-            List<QueryBuilder> list = Optional.ofNullable(boolQueryDTO.getQueryBuilder()).orElse(new ArrayList<>());
-            list.add(queryBuilder);
-            boolQueryDTO.setQueryBuilder(list);
-            return;
+            return packageBaseBool(fieldDTO,type);
         }else if(fieldName.contains(RegexConstants.REGEX_POINT)){
             String parent = StringUtils.substringBefore(fieldName, RegexConstants.REGEX_POINT);
-            Field[] declaredFields = boolQueryDTO.getDeclaredFields();
             Optional<Field> first = Stream.of(declaredFields).filter(x -> StringUtils.equals(parent, x.getName())).findFirst();
             if(first.isPresent()){
                 Field field = first.get();
                 org.springframework.data.elasticsearch.annotations.Field annotation = AnnotationUtils.findAnnotation(field, org.springframework.data.elasticsearch.annotations.Field.class);
                 getChildType(fieldMap,StringUtils.substringAfter(fieldName, RegexConstants.REGEX_POINT), field,annotation);
-                if(fieldMap.containsKey(fieldDTO.getFieldName())){
-                    queryBuilder = packageBaseBool(fieldDTO, fieldMap.getOrDefault(fieldDTO.getFieldName(), ""));
-                    List<QueryBuilder> list = Optional.ofNullable(boolQueryDTO.getQueryBuilder()).orElse(new ArrayList<>());
-                    list.add(queryBuilder);
-                    boolQueryDTO.setQueryBuilder(list);
-                    return;
+                if(fieldMap.containsKey(fieldName)){
+                    return packageBaseBool(fieldDTO, fieldMap.getOrDefault(fieldName, ""));
                 }else{
                     throw new ElasticSearchException("找不到对应字段");
                 }
@@ -89,9 +92,10 @@ public class ExpressionPackageBoolQueryExecute extends AbstractPackageBoolQueryE
         }else{
             throw new ElasticSearchException("找不到对应字段");
         }
-
-
+        return null;
     }
+
+
 
     /**
      * 包装基本的Bool语句类型
@@ -112,7 +116,8 @@ public class ExpressionPackageBoolQueryExecute extends AbstractPackageBoolQueryE
             MatchQueryBuilder matchQuery = QueryBuilders.matchQuery(fieldName, fieldDTO.getValue());
             return packageNeBool(matchQuery,fieldDTO);
         }else if(FieldType.Keyword.name().equals(type)){
-            return packageKeywordQuery(fieldDTO);
+            QueryBuilder queryBuilder = packageKeywordQuery(fieldDTO);
+            return packageNeBool(queryBuilder,fieldDTO);
         }else if(FieldType.Date.name().equals(type) && fieldDTO.getValue() !=null){
             String value = DateUtil.returnDateTime(fieldDTO.getValue().toString());
             RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(fieldDTO.getFieldName());
@@ -252,5 +257,65 @@ public class ExpressionPackageBoolQueryExecute extends AbstractPackageBoolQueryE
             }
         }
 
+    }
+
+    public QueryBuilder packageDefaultExpression(FieldTreeRelateDTO fieldTreeRelateDTO, Map<String, String> fieldMap, Field[] declaredFields) {
+        FieldDTO fieldDTO = fieldTreeRelateDTO.getFieldDTO();
+        ElasticSearchAssert.meetCondition(!fieldMap.containsKey(fieldDTO.getFieldName()),"找不到对应字段");
+        return getQueryBuilder(fieldDTO,fieldMap,declaredFields);
+    }
+
+
+
+
+    public List<CompleteFieldDTO> getFieldTreeRelateDTO(List<FieldRelateDTO> fieldRelateList, Map<String, String> fieldMap, Field[] declaredFields) {
+        List<CompleteFieldDTO> collect = fieldRelateList.stream().map(x -> {
+            FieldDTO fieldDTO = x.getFieldDTO();
+            ElasticSearchAssert.meetCondition(fieldDTO == null, "参数错误");
+            CompleteFieldDTO completeFieldDTO = new CompleteFieldDTO();
+            BeanUtils.copyProperties(fieldDTO, completeFieldDTO);
+            if (StringUtils.contains(fieldDTO.getFieldName(), RegexConstants.REGEX_POINT)) {
+                String parentField = StringUtils.substringBefore(fieldDTO.getFieldName(), RegexConstants.REGEX_POINT);
+                String childrenField = StringUtils.substringAfter(fieldDTO.getFieldName(), RegexConstants.REGEX_POINT);
+                ElasticSearchAssert.meetCondition(!fieldMap.containsKey(parentField), "找不到该字段");
+                completeFieldDTO.setParentFieldType(fieldMap.get(parentField));
+                Optional<Field> first = Stream.of(declaredFields).filter(field -> StringUtils.equals(parentField, field.getName())).findFirst();
+                if (first.isPresent()) {
+                    Field field = first.get();
+                    org.springframework.data.elasticsearch.annotations.Field annotation = AnnotationUtils.findAnnotation(field, org.springframework.data.elasticsearch.annotations.Field.class);
+                    getChildType(fieldMap, childrenField, field, annotation);
+                    completeFieldDTO.setChildrenNameType(fieldMap.get(fieldDTO.getFieldName()));
+                }
+            }
+            return completeFieldDTO;
+        }).collect(Collectors.toList());
+        return collect;
+    }
+
+
+
+
+    public QueryBuilder getBoolQueryBuilder(List<CompleteFieldDTO> parentCollect, Map<String, String> fieldMap, Field[] declaredFields) {
+        // 就当parentField 不存在的情况下 去处理对应的语句
+        CompleteFieldDTO completeFieldDTO = parentCollect.remove(0);
+        FieldDTO fieldDTO = new FieldDTO();
+        BeanUtils.copyProperties(completeFieldDTO,fieldDTO);
+        NestedQueryBuilder queryBuilder = (NestedQueryBuilder) getQueryBuilder(fieldDTO, fieldMap, declaredFields);
+        QueryBuilder query = queryBuilder.query();
+        for (CompleteFieldDTO completeField : parentCollect) {
+            BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+            FieldDTO field = new FieldDTO();
+            BeanUtils.copyProperties(completeField,field);
+            NestedQueryBuilder nestedQueryBuilder = (NestedQueryBuilder) getQueryBuilder(fieldDTO, fieldMap, declaredFields);
+            if(RelateEnum.OR.getCode().equals(completeField.getExpressionRelate())){
+                boolQueryBuilder.should(nestedQueryBuilder.query());
+                boolQueryBuilder.should(query);
+            }else if(RelateEnum.AND.getCode().equals(completeField.getExpressionRelate())){
+                boolQueryBuilder.must(nestedQueryBuilder.query());
+                boolQueryBuilder.must(query);
+            }
+            query=boolQueryBuilder;
+        }
+        return query;
     }
 }
