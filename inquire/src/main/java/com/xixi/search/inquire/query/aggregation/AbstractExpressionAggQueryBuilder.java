@@ -32,6 +32,12 @@ import org.springframework.util.CollectionUtils;
 import java.util.List;
 
 /**
+ *  目前 聚合存在以下问题 ：
+ *  1.代码抽象能力差  对于子聚合 方式无法进行指定 后续需要将子聚合进行拆分
+ *  2.聚合返回类 考虑使用模版模式来进行代码抽象
+ *  3.在嵌套聚合时 查询的是嵌套类的数量 不是父类的数量
+ *  4.需要考虑嵌套 聚合 逆向聚合的能力
+ *  会在后期进行优化
  * @author shengchengchao
  * @Description
  * @createTime 2021/8/29
