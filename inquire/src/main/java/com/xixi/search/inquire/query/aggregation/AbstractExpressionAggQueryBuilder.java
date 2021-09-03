@@ -1,11 +1,15 @@
 package com.xixi.search.inquire.query.aggregation;
 
+import com.google.common.primitives.Longs;
+import com.xixi.search.common.advice.ElasticSearchAssert;
 import com.xixi.search.common.constant.EsConstants;
 import com.xixi.search.common.constant.RegexConstants;
 import com.xixi.search.common.dto.AggDataDTO;
 import com.xixi.search.common.dto.AggParamDTO;
 import com.xixi.search.common.param.BaseQueryParam;
 import com.xixi.search.common.vo.ChartDataVO;
+import com.xixi.search.inquire.query.resultMap.EsDateHistogramResultMapper;
+import com.xixi.search.inquire.query.resultMap.EsRangeHistogramResultMapper;
 import com.xixi.search.inquire.query.resultMap.EsTermsHistogramResultMapper;
 import com.xixi.search.inquire.query.search.AbstractExpressionSearchQueryBuilder;
 import org.apache.commons.lang3.StringUtils;
@@ -23,6 +27,7 @@ import org.springframework.data.elasticsearch.core.DefaultResultMapper;
 import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
+import org.springframework.util.CollectionUtils;
 
 import java.util.List;
 
@@ -55,7 +60,7 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
      * @param aggParamDTO
      * @return
      */
-    ChartDataVO termHistogram(String expression, AggParamDTO aggParamDTO){
+    public ChartDataVO termHistogram(String expression, AggParamDTO aggParamDTO){
         NativeSearchQueryBuilder searchQueryBuilder = getAggreSearchBuilder(expression);
         EsTermsHistogramResultMapper esTermsHistogramResultMapper = new EsTermsHistogramResultMapper(aggParamDTO);
         buildTermAggregation(aggParamDTO,searchQueryBuilder,esTermsHistogramResultMapper);
@@ -81,7 +86,7 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
         }
         //如果子类不为null，则需要进行二级计算
         if (aggParamDTO.getChild()!=null) {
-            if (EsConstants.AGG_TERMS.equals(aggParamDTO.getChild())) {
+            if (EsConstants.AGG_TERMS.equals(aggParamDTO.getChild().getSearchTyped())) {
                 AggParamDTO child = aggParamDTO.getChild();
                 String childField = child.getSearchField();
                 TermsAggregationBuilder childAgg = AggregationBuilders.terms(EsConstants.CHILDREN_CODE).field(childField);
@@ -93,7 +98,7 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
         }
 
         FilterAggregationBuilder aggregationBuilder = AggregationBuilders.filter(EsConstants.CHART_FILTER_FIELD, QueryBuilders.boolQuery()).subAggregation(termsAggregationBuilder);
-
+        
         //如果为nest则需要增加一层结构
         if (StringUtils.equals(FieldType.Nested.name(), aggParamDTO.getSearchTyped())) {
             abstractAggregationBuilder = AggregationBuilders.nested(EsConstants.CODE + FieldType.Nested.name(), getPathFromParams(aggParamDTO.getSearchField()));
@@ -111,7 +116,7 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
      * @param param 表达式字符串
      * @return 截取的字符串
      */
-    public String getPathFromParams(String param) {
+    private String getPathFromParams(String param) {
         if (param.lastIndexOf(RegexConstants.REGEX_POINT) > -1) {
             return StringUtils.substringBefore(param, RegexConstants.REGEX_POINT);
         } else {
@@ -125,11 +130,11 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
      * @param aggParamDTO
      * @return
      */
-    ChartDataVO rangeHistogram(String expression, AggParamDTO aggParamDTO){
+    public ChartDataVO rangeHistogram(String expression, AggParamDTO aggParamDTO){
         NativeSearchQueryBuilder searchQueryBuilder = getAggreSearchBuilder(expression);
-        EsTermsHistogramResultMapper esTermsHistogramResultMapper = new EsTermsHistogramResultMapper(aggParamDTO);
-        buildRangeHistogram(aggParamDTO,esTermsHistogramResultMapper,searchQueryBuilder);
-        List<AggDataDTO> resultList = esTermsHistogramResultMapper.getResultList();
+        EsRangeHistogramResultMapper esRangeHistogramResultMapper = new EsRangeHistogramResultMapper(aggParamDTO);
+        buildRangeHistogram(aggParamDTO,esRangeHistogramResultMapper,searchQueryBuilder);
+        List<AggDataDTO> resultList = esRangeHistogramResultMapper.getResultList();
         ChartDataVO chartDataVO = new ChartDataVO();
         chartDataVO.setAggData(resultList);
         return chartDataVO;
@@ -140,6 +145,12 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
         AbstractAggregationBuilder abstractAggregationBuilder;
         
         RangeAggregationBuilder rangeAggregationBuilder = AggregationBuilders.range(EsConstants.CODE).field(aggParamDTO.getSearchField());
+        ElasticSearchAssert.meetCondition(CollectionUtils.isEmpty(aggParamDTO.getRangeList()),"范围为空");
+        List<String> rangeParam = aggParamDTO.getRangeList();
+        rangeParam.forEach(each->{
+            String[] split = StringUtils.split(each, EsConstants.REGEX_LINE_SYMBOL);
+            rangeAggregationBuilder.addRange(Longs.tryParse(split[0]), Longs.tryParse(split[1]));
+        });
         if (aggParamDTO.getChild() != null) {
             AggParamDTO child = aggParamDTO.getChild();
             if (EsConstants.AGG_TERMS.equals(child.getSearchTyped())) {
@@ -171,17 +182,18 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
      * @param aggParamDTO
      * @return
      */
-    ChartDataVO dateHistogram(String expression, AggParamDTO aggParamDTO){
+    public ChartDataVO dateHistogram(String expression, AggParamDTO aggParamDTO){
         NativeSearchQueryBuilder searchQueryBuilder = getAggreSearchBuilder(expression);
-        EsTermsHistogramResultMapper esTermsHistogramResultMapper = new EsTermsHistogramResultMapper(aggParamDTO);
-        buildDateAggregation(aggParamDTO,searchQueryBuilder,esTermsHistogramResultMapper);
-        List<AggDataDTO> resultList = esTermsHistogramResultMapper.getResultList();
+        EsDateHistogramResultMapper esDateHistogramResultMapper = new EsDateHistogramResultMapper(aggParamDTO);
+        buildDateAggregation(aggParamDTO,searchQueryBuilder,esDateHistogramResultMapper);
+        List<AggDataDTO> resultList = esDateHistogramResultMapper.getResultList();
         ChartDataVO chartDataVO = new ChartDataVO();
         chartDataVO.setAggData(resultList);
-        return null;
+        return chartDataVO;
     }
 
     AggregatedPage<T> buildDateAggregation(AggParamDTO aggParamDTO, NativeSearchQueryBuilder searchQueryBuilder, DefaultResultMapper defaultResultMapper){
+        AbstractAggregationBuilder abstractAggregationBuilder;
         //级别一
         String field = aggParamDTO.getSearchField();
         //解析为数据范围
@@ -209,7 +221,14 @@ public abstract class AbstractExpressionAggQueryBuilder<T> extends AbstractExpre
             }
         }
 
-        searchQueryBuilder.addAggregation(dateHistogramAggregationBuilder);
+        //如果为nest则需要增加一层结构
+        if (StringUtils.equals(FieldType.Nested.name(), aggParamDTO.getSearchTyped())) {
+            abstractAggregationBuilder = AggregationBuilders.nested(EsConstants.CODE + FieldType.Nested.name(), getPathFromParams(aggParamDTO.getSearchField()));
+            abstractAggregationBuilder.subAggregation(dateHistogramAggregationBuilder);
+        } else {
+            abstractAggregationBuilder = dateHistogramAggregationBuilder;
+        }
+        searchQueryBuilder.addAggregation(abstractAggregationBuilder);
         NativeSearchQuery query = searchQueryBuilder.build();
         return elasticsearchRestTemplate.queryForPage(query,gettClass(),defaultResultMapper);
     }

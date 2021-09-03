@@ -10,6 +10,11 @@ import org.elasticsearch.index.query.QueryBuilders;
  */
 public class EsConstants {
 
+
+    /**
+     * 横线连接符
+     */
+    public static final String REGEX_LINE_SYMBOL = "-";
     /** 默认的没有加条件的BOL */
     public static BoolQueryBuilder DEFAULT_QUERY_BUILDER = QueryBuilders.boolQuery();
 

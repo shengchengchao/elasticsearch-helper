@@ -2,6 +2,8 @@ package com.xixi.search.common.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * @author shengchengchao
  * @Description
@@ -23,5 +25,7 @@ public class AggParamDTO {
     private AggParamDTO child;
 
     private String unit;
+
+    private List<String> rangeList;
 }
 
